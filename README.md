@@ -24,7 +24,7 @@
 Author or drop single-file markup directly into the code studio, view immediate live execution in an isolated sandbox, and publish permanent shareable permalinks in one click.
 
 - **Zero backend required**: Runs 100% in the client browser. No databases, accounts, or cloud dependencies.
-- **Permanent permalinks**: Full HTML documents are encoded into portable UTF-8 Base64URL hash fragments (`#v=...`).
+- **High-efficiency permalinks**: Full HTML documents are compressed with Level-9 Deflate into compact Base64URL hash fragments (`#v=z~...`), reducing URL sizes by up to 85% with zero server dependency.
 - **Real-time execution**: Instant live DOM rendering with support for Canvas 2D, WebGL, CSS animations, Tailwind CDN, and inline JavaScript.
 - **One-click export**: Download standalone `.html` files anytime ready for production hosting.
 

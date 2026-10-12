@@ -85,7 +85,7 @@ export const FeatureBento: React.FC = () => {
               instant permanent link
             </h3>
             <p className="text-xs sm:text-sm text-[#007AFF]/85 leading-relaxed">
-              Encoding your entire HTML application directly into a UTF-8 Base64URL fragment (<code className="font-mono text-[#007AFF]">#v=...</code>). The recipient receives a self-contained, immortal URL with zero server dependency.
+              Compressing your HTML with Level-9 Deflate into an ultra-compact Base64URL fragment (<code className="font-mono text-[#007AFF]">#v=...</code>). Slashes link sizes by up to 85% with zero server dependency.
             </p>
           </div>
 

@@ -5,7 +5,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { encodePaste, decodePaste } from '../utils/shareEncoding';
+import { shortenUrl } from '../utils/urlShortener';
 import { PrismCodeEditor } from './PrismCodeEditor';
+import { UrlShortenerModal } from './UrlShortenerModal';
+import { Scissors, Loader2 } from 'lucide-react';
 
 interface FullScreenEditorProps {
   onBackToPoster?: () => void;
@@ -86,6 +89,8 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
   const [toastMessage, setToastMessage] = useState<string>('');
   const [showToast, setShowToast] = useState<boolean>(false);
   const [isViewOnly, setIsViewOnly] = useState<boolean>(false);
+  const [isShortenerOpen, setIsShortenerOpen] = useState<boolean>(false);
+  const [isShortening, setIsShortening] = useState<boolean>(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const renderTimeoutRef = useRef<number | null>(null);
@@ -160,15 +165,30 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
       return;
     }
 
+    setIsShortening(true);
+    showToastMsg('Shortening link...');
+
     try {
       const encoded = encodePaste(code);
-      const url = `${window.location.origin}${window.location.pathname}#v=${encoded}`;
-      await navigator.clipboard.writeText(url);
-      showToastMsg('Link copied');
+      const permalink = `${window.location.origin}${window.location.pathname}#v=${encoded}`;
+      history.replaceState(null, '', `#v=${encoded}`);
+      
+      // Automatically shorten the link
+      const short = await shortenUrl(permalink);
+      await navigator.clipboard.writeText(short);
+      
+      if (short !== permalink) {
+        showToastMsg(`Short link copied: ${short}`);
+      } else {
+        showToastMsg('Compressed permalink copied');
+      }
     } catch {
       const encoded = encodePaste(code);
-      const url = `${window.location.origin}${window.location.pathname}#v=${encoded}`;
-      prompt('Copy share link:', url);
+      const permalink = `${window.location.origin}${window.location.pathname}#v=${encoded}`;
+      history.replaceState(null, '', `#v=${encoded}`);
+      prompt('Copy share link:', permalink);
+    } finally {
+      setIsShortening(false);
     }
   };
 
@@ -291,13 +311,29 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
             Open full
           </button>
           <button
-            onClick={handleShare}
-            className="px-3.5 py-1.5 rounded-lg border border-[#007AFF] bg-[#007AFF] text-white hover:bg-[#0066D6] font-semibold cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+            onClick={() => setIsShortenerOpen(true)}
+            className="px-2.5 py-1.5 rounded-lg border border-[#007AFF]/25 bg-white text-[#007AFF] hover:bg-[#007AFF]/5 cursor-pointer transition-colors flex items-center gap-1.5"
+            title="Open URL Shortener Studio"
           >
-            <span>Share link</span>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
+            <Scissors className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Shortener</span>
+          </button>
+          <button
+            onClick={handleShare}
+            disabled={isShortening}
+            className="px-3.5 py-1.5 rounded-lg border border-[#007AFF] bg-[#007AFF] text-white hover:bg-[#0066D6] font-semibold cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-80"
+          >
+            {isShortening ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Shortening...</span>
+              </>
+            ) : (
+              <>
+                <span>Share link</span>
+                <Scissors className="w-3.5 h-3.5" />
+              </>
+            )}
           </button>
         </div>
       </header>
@@ -382,6 +418,18 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
       >
         {toastMessage}
       </div>
+
+      {/* URL Shortener Modal */}
+      <UrlShortenerModal
+        isOpen={isShortenerOpen}
+        onClose={() => setIsShortenerOpen(false)}
+        activePermalink={
+          typeof window !== 'undefined' && code.trim()
+            ? `${window.location.origin}${window.location.pathname}#v=${encodePaste(code)}`
+            : ''
+        }
+        onToast={showToastMsg}
+      />
     </div>
   );
 };
