@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --color-electric: #007AFF;
+}
+
+:root {
+  color: #007AFF;
+  background-color: #FFFFFF;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #FFFFFF;
+  color: #007AFF;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar matching Swiss blue style */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FFFFFF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 122, 255, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 122, 255, 0.6);
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 35s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+
+/* Prism.js Syntax Highlighting Tokens (Swiss Editorial Theme) */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #8C9BAE;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #5A6D82;
+}
+
+.token.tag,
+.token.tag .token.punctuation {
+  color: #007AFF;
+  font-weight: 600;
+}
+
+.token.attr-name {
+  color: #7B3FE4;
+}
+
+.token.attr-value,
+.token.string {
+  color: #088258;
+}
+
+.token.operator,
+.token.entity,
+.token.url {
+  color: #007AFF;
+}
+
+.token.keyword {
+  color: #0062D2;
+  font-weight: 600;
+}
+
+.token.function,
+.token.class-name {
+  color: #1A56DB;
+}
+
+.token.boolean,
+.token.number {
+  color: #D9480F;
+}
+
+.token.property,
+.token.constant,
+.token.symbol {
+  color: #007AFF;
+}
+
+.token.selector {
+  color: #D9480F;
+  font-weight: 600;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #B02A37;
+}
+
