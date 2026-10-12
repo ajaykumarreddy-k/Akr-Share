@@ -92,42 +92,81 @@ export async function unpack(t: string): Promise<string> {
 export const encodePaste = pack;
 export const decodePaste = unpack;
 
+const pasteMemoryCache = new Map<string, string>();
+
 /**
  * Fetches cloud paste content by short ID (#p=ID or #id=ID)
  */
 export async function fetchCloudPaste(id: string): Promise<string | null> {
   if (!id) return null;
 
-  // 1. Try local/deployed /api/paste
+  // Check in-memory cache first (0ms)
+  if (pasteMemoryCache.has(id)) {
+    return pasteMemoryCache.get(id)!;
+  }
+
+  // Check sessionStorage (0ms)
+  try {
+    const cached = sessionStorage.getItem(`akr_p_${id}`);
+    if (cached) {
+      pasteMemoryCache.set(id, cached);
+      return cached;
+    }
+  } catch {}
+
+  // 1. Try local/deployed /api/paste (edge cached)
   try {
     const res = await fetch(`/api/paste?id=${encodeURIComponent(id)}`, {
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(4500),
     });
     if (res.ok) {
-      return await res.text();
+      const text = await res.text();
+      if (text && text.trim()) {
+        pasteMemoryCache.set(id, text);
+        try {
+          sessionStorage.setItem(`akr_p_${id}`, text);
+        } catch {}
+        return text;
+      }
     }
   } catch {}
 
-  // 2. Try dpaste via CORS gateway
-  try {
+  // 2. Parallel CORS fallback to public gateways if /api/paste is unreachable
+  const fetchGatewayDpaste = async () => {
     const res = await fetch(
       `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://dpaste.org/${id}/raw`)}`,
-      { signal: AbortSignal.timeout(6000) }
+      { signal: AbortSignal.timeout(4000) }
     );
     if (res.ok) {
-      return await res.text();
+      const text = await res.text();
+      if (text && !text.includes('<!DOCTYPE html>') && text.trim().length > 0) {
+        return text;
+      }
     }
-  } catch {}
+    throw new Error('dpaste gateway miss');
+  };
 
-  // 3. Try paste.rs via CORS gateway
-  try {
+  const fetchGatewayPasteRs = async () => {
     const res = await fetch(
       `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://paste.rs/${id}`)}`,
-      { signal: AbortSignal.timeout(6000) }
+      { signal: AbortSignal.timeout(4000) }
     );
     if (res.ok) {
-      return await res.text();
+      const text = await res.text();
+      if (text && text.trim().length > 0) {
+        return text;
+      }
     }
+    throw new Error('paste.rs gateway miss');
+  };
+
+  try {
+    const text = await Promise.any([fetchGatewayDpaste(), fetchGatewayPasteRs()]);
+    pasteMemoryCache.set(id, text);
+    try {
+      sessionStorage.setItem(`akr_p_${id}`, text);
+    } catch {}
+    return text;
   } catch {}
 
   return null;

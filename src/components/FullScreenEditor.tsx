@@ -85,16 +85,33 @@ const DEFAULT_SAMPLE = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const isDirectPasteUrl = () => {
+  if (typeof window === 'undefined') return false;
+  const hash = window.location.hash;
+  const path = window.location.pathname;
+  return (
+    hash.startsWith('#v=') ||
+    /^#(?:p|id)[=-]/.test(hash) ||
+    path.startsWith('/p/')
+  );
+};
+
+const hasEditQueryParam = () => {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('edit') !== null;
+};
+
 export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
   onBackToPoster,
   showBackToPosterButton = true,
 }) => {
-  const [code, setCode] = useState<string>(DEFAULT_SAMPLE);
+  const [code, setCode] = useState<string>(() => (isDirectPasteUrl() ? '' : DEFAULT_SAMPLE));
   const [sizeText, setSizeText] = useState<string>('0.0 KB');
   const [isMobileStage, setIsMobileStage] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [showToast, setShowToast] = useState<boolean>(false);
-  const [isViewOnly, setIsViewOnly] = useState<boolean>(false);
+  const [isViewOnly, setIsViewOnly] = useState<boolean>(() => isDirectPasteUrl() && !hasEditQueryParam());
+  const [isLoadingPaste, setIsLoadingPaste] = useState<boolean>(() => isDirectPasteUrl());
   const [isShortenerOpen, setIsShortenerOpen] = useState<boolean>(false);
   const [isShortening, setIsShortening] = useState<boolean>(false);
   const [modalPermalink, setModalPermalink] = useState<string>('');
@@ -143,40 +160,46 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
   // Load from hash on mount
   useEffect(() => {
     const handleHash = async () => {
-      // 1. Cloud short paste: #p=ID or #id=ID
-      const pasteMatch = window.location.hash.match(/^#(?:p|id)=([a-zA-Z0-9_-]+)$/);
+      // 1. Cloud short paste: #p=ID, #p-ID, #id=ID, or pathname /p/ID
+      const pasteMatch =
+        window.location.hash.match(/^#(?:p|id)[=-]([a-zA-Z0-9_-]+)$/) ||
+        window.location.pathname.match(/^\/p\/([a-zA-Z0-9_-]+)$/);
+
       if (pasteMatch) {
         const id = pasteMatch[1];
+        setIsLoadingPaste(true);
         try {
-          showToastMsg('Loading paste...');
           const content = await fetchCloudPaste(id);
           if (content) {
             setCode(content);
             const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
             setIsViewOnly(!hasEditParam);
+            setIsLoadingPaste(false);
             return;
           }
         } catch {
           showToastMsg('Failed to load shared paste');
+        } finally {
+          setIsLoadingPaste(false);
         }
       }
 
       // 2. Direct embedded payload: #v=...
       const match = window.location.hash.match(/^#v=(.+)$/);
       if (match) {
+        setIsLoadingPaste(true);
         try {
           const decoded = await unpack(match[1]);
           setCode(decoded);
           const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
-          if (!hasEditParam) {
-            setIsViewOnly(true);
-          } else {
-            setIsViewOnly(false);
-          }
+          setIsViewOnly(!hasEditParam);
         } catch {
           showToastMsg('Invalid shared link');
+        } finally {
+          setIsLoadingPaste(false);
         }
-      } else {
+      } else if (!pasteMatch) {
+        setIsLoadingPaste(false);
         setIsViewOnly(false);
       }
     };
@@ -303,6 +326,23 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
 
   // Viewer mode (when opening a shared link directly without ?edit)
   if (isViewOnly) {
+    if (isLoadingPaste) {
+      return (
+        <div className="relative w-screen h-screen flex flex-col items-center justify-center bg-[#FAF8F5] text-[#241813] select-none">
+          <div className="relative flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full border-2 border-[#007AFF]/20 border-t-[#007AFF] animate-spin" />
+            <div className="absolute w-4 h-4 rounded-full bg-[#007AFF]/15 flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full bg-[#007AFF]" />
+            </div>
+          </div>
+          <div className="mt-4 text-center">
+            <h2 className="text-sm font-bold tracking-tight text-[#241813]">Loading Live Application</h2>
+            <p className="text-xs text-[#007AFF] font-mono mt-1 opacity-80">Fetching shared sandbox...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="relative w-screen h-screen m-0 p-0 overflow-hidden bg-white">
         <iframe
@@ -411,7 +451,13 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
       </header>
 
       {/* Main Split Grid (50% Code Textarea, 50% Live Preview Stage) */}
-      <main className="flex-1 grid grid-cols-1 md:grid-cols-2 min-h-0 min-w-0 bg-white">
+      <main className="relative flex-1 grid grid-cols-1 md:grid-cols-2 min-h-0 min-w-0 bg-white">
+        {isLoadingPaste && (
+          <div className="absolute inset-0 z-40 bg-white/80 backdrop-blur-xs flex flex-col items-center justify-center">
+            <div className="w-8 h-8 rounded-full border-2 border-[#007AFF]/20 border-t-[#007AFF] animate-spin mb-2" />
+            <span className="text-xs font-mono text-[#007AFF]">Loading shared paste into editor...</span>
+          </div>
+        )}
         
         {/* Left Pane: Code Textarea with Prism.js Syntax Highlighting */}
         <section className="flex flex-col min-h-0 min-w-0 border-r border-[#007AFF]/15 bg-[#FAFCFF]">

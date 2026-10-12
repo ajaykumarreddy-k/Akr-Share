@@ -10,28 +10,31 @@ import { FeatureBento } from './components/FeatureBento';
 import { ComparisonSpec } from './components/ComparisonSpec';
 import { Footer } from './components/Footer';
 
+const checkIsSharedView = () => {
+  if (typeof window === 'undefined') return false;
+  const hash = window.location.hash;
+  const hasHash =
+    hash.startsWith('#v=') ||
+    hash.startsWith('#p=') ||
+    hash.startsWith('#p-') ||
+    hash.startsWith('#id=') ||
+    hash.startsWith('#id-') ||
+    window.location.pathname.startsWith('/p/');
+  const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
+  return hasHash && !hasEditParam;
+};
+
 export default function App() {
-  const [isSharedView, setIsSharedView] = useState<boolean>(false);
+  const [isSharedView, setIsSharedView] = useState<boolean>(checkIsSharedView);
 
   // Check if opening directly from a shared link without ?edit
   useEffect(() => {
-    const checkHash = () => {
-      const hasHash =
-        window.location.hash.startsWith('#v=') ||
-        window.location.hash.startsWith('#p=') ||
-        window.location.hash.startsWith('#id=') ||
-        window.location.pathname.startsWith('/p/');
-      const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
-      if (hasHash && !hasEditParam) {
-        setIsSharedView(true);
-      } else {
-        setIsSharedView(false);
-      }
+    const handleHash = () => {
+      setIsSharedView(checkIsSharedView());
     };
 
-    checkHash();
-    window.addEventListener('hashchange', checkHash);
-    return () => window.removeEventListener('hashchange', checkHash);
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
   const scrollToStudio = () => {
