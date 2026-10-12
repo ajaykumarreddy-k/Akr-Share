@@ -1,83 +1,155 @@
-import { deflateSync, inflateSync, strToU8, strFromU8 } from 'fflate';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 /**
- * Fast, chunked conversion of Uint8Array to URL-safe Base64 string.
- * Uses 32KB chunks to prevent call-stack overflows on large documents.
+ * Automatically removes comments from HTML, CSS, and JS to minimize payload size.
+ * Preserves URLs (http://, https://) and conditional comments.
  */
-const uint8ToBase64Url = (bytes: Uint8Array): string => {
+export function stripComments(code: string): string {
+  if (!code) return '';
+
+  // 1. Remove HTML comments <!-- ... --> (preserve IE conditionals)
+  let clean = code.replace(/<!--(?!\[if[\s\S]+?\]>)([\s\S]*?)-->/g, '');
+
+  // 2. Remove CSS/JS block comments /* ... */
+  clean = clean.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // 3. Remove single-line JS comments // ... (protecting http://, https://)
+  clean = clean
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//')) return '';
+      const idx = line.indexOf('//');
+      if (idx > -1) {
+        const before = line.slice(0, idx);
+        if (/https?:$/.test(before.trim())) return line;
+        const singleQuotes = (before.match(/'/g) || []).length;
+        const doubleQuotes = (before.match(/"/g) || []).length;
+        const backticks = (before.match(/`/g) || []).length;
+        if (singleQuotes % 2 === 0 && doubleQuotes % 2 === 0 && backticks % 2 === 0) {
+          return line.slice(0, idx).trimEnd();
+        }
+      }
+      return line;
+    })
+    .filter((line) => line.trim().length > 0)
+    .join('\n');
+
+  return clean;
+}
+
+/**
+ * Compress -> URL-safe base64 using CompressionStream('deflate-raw')
+ * Includes chunked buffer conversion to safely handle large documents without call-stack limits.
+ */
+export async function pack(str: string): Promise<string> {
+  const s = new Blob([str]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  const b = new Uint8Array(await new Response(s).arrayBuffer());
+
   let bin = '';
-  const len = bytes.length;
   const CHUNK_SIZE = 0x8000;
-  for (let i = 0; i < len; i += CHUNK_SIZE) {
+  for (let i = 0; i < b.length; i += CHUNK_SIZE) {
     bin += String.fromCharCode.apply(
       null,
-      bytes.subarray(i, Math.min(i + CHUNK_SIZE, len)) as unknown as number[]
+      b.subarray(i, Math.min(i + CHUNK_SIZE, b.length)) as unknown as number[]
     );
   }
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-};
+}
 
 /**
- * Fast conversion of URL-safe Base64 string to Uint8Array.
+ * Decompress URL-safe base64 using DecompressionStream('deflate-raw')
+ * Gracefully falls back to legacy formats if string was packed with older methods.
  */
-const base64UrlToUint8 = (str: string): Uint8Array => {
-  const clean = str.replace(/-/g, '+').replace(/_/g, '/');
+export async function unpack(t: string): Promise<string> {
+  if (!t) return '';
+  const clean = (t.startsWith('z~') ? t.slice(2) : t).replace(/-/g, '+').replace(/_/g, '/');
   const bin = atob(clean + '='.repeat((4 - (clean.length % 4)) % 4));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) {
-    bytes[i] = bin.charCodeAt(i);
-  }
-  return bytes;
-};
+  const b = Uint8Array.from(bin, (c) => c.charCodeAt(0));
 
-/**
- * Encodes code into an ultra-compact URL-safe permalink fragment.
- * Uses Deflate (level 9) compression to drastically reduce shared URL length (60-85% smaller).
- * Falls back to raw encoding only if compressed output happens to be larger.
- */
-export const encodePaste = (s: string): string => {
-  const rawBytes = strToU8(s);
-  
-  // Deflate with maximum compression (level 9)
-  const compressedBytes = deflateSync(rawBytes, { level: 9 });
-
-  // Use compressed version with 'z~' prefix if it is actually smaller
-  if (compressedBytes.length < rawBytes.length) {
-    return 'z~' + uint8ToBase64Url(compressedBytes);
-  }
-
-  // Otherwise, use uncompressed
-  return uint8ToBase64Url(rawBytes);
-};
-
-/**
- * Decodes permalink payload back into string.
- * Supports:
- * 1. New ultra-compact Deflate payloads ('z~...')
- * 2. Legacy uncompressed UTF-8 Base64URL payloads (100% backward compatible)
- */
-export const decodePaste = (s: string): string => {
-  if (!s) return '';
-
-  // 1. Compressed payload (starts with 'z~')
-  if (s.startsWith('z~')) {
-    const bytes = base64UrlToUint8(s.slice(2));
-    const decompressed = inflateSync(bytes);
-    return strFromU8(decompressed);
-  }
-
-  // 2. Legacy uncompressed UTF-8 payload (or auto-detect compressed fallback)
-  const bytes = base64UrlToUint8(s);
+  // 1. Try DecompressionStream('deflate-raw')
   try {
-    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return decoded;
+    const s = new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(s).text();
   } catch {
-    // If not valid UTF-8, attempt inflation as fallback
+    // 2. Try DecompressionStream('deflate')
     try {
-      const decompressed = inflateSync(bytes);
-      return strFromU8(decompressed);
+      const s = new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate'));
+      return await new Response(s).text();
     } catch {
-      return new TextDecoder().decode(bytes);
+      // 3. Fallback to uncompressed UTF-8
+      return new TextDecoder().decode(b);
     }
   }
-};
+}
+
+/**
+ * Wrapper for backward compatibility with existing components
+ */
+export const encodePaste = pack;
+export const decodePaste = unpack;
+
+/**
+ * Fetches cloud paste content by short ID (#p=ID or #id=ID)
+ */
+export async function fetchCloudPaste(id: string): Promise<string | null> {
+  if (!id) return null;
+
+  // 1. Try local/deployed /api/paste
+  try {
+    const res = await fetch(`/api/paste?id=${encodeURIComponent(id)}`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      return await res.text();
+    }
+  } catch {}
+
+  // 2. Try dpaste via CORS gateway
+  try {
+    const res = await fetch(
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://dpaste.org/${id}/raw`)}`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (res.ok) {
+      return await res.text();
+    }
+  } catch {}
+
+  // 3. Try paste.rs via CORS gateway
+  try {
+    const res = await fetch(
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://paste.rs/${id}`)}`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (res.ok) {
+      return await res.text();
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Stores large content as a cloud paste to guarantee an ultra-short permalink
+ */
+export async function storeCloudPaste(content: string): Promise<string | null> {
+  try {
+    const res = await fetch('/api/paste', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.id) {
+        return data.id;
+      }
+    }
+  } catch {}
+  return null;
+}

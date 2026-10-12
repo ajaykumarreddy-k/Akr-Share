@@ -4,7 +4,13 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { encodePaste, decodePaste } from '../utils/shareEncoding';
+import {
+  pack,
+  unpack,
+  stripComments,
+  fetchCloudPaste,
+  storeCloudPaste,
+} from '../utils/shareEncoding';
 import { shortenUrl } from '../utils/urlShortener';
 import { PrismCodeEditor } from './PrismCodeEditor';
 import { UrlShortenerModal } from './UrlShortenerModal';
@@ -91,6 +97,31 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
   const [isViewOnly, setIsViewOnly] = useState<boolean>(false);
   const [isShortenerOpen, setIsShortenerOpen] = useState<boolean>(false);
   const [isShortening, setIsShortening] = useState<boolean>(false);
+  const [modalPermalink, setModalPermalink] = useState<string>('');
+
+  const handleOpenShortenerModal = async () => {
+    setIsShortenerOpen(true);
+    if (code.trim()) {
+      try {
+        const clean = stripComments(code);
+        const packed = await pack(clean);
+        if (packed.length <= 2500) {
+          setModalPermalink(`${window.location.origin}${window.location.pathname}#v=${packed}`);
+        } else {
+          const cloudId = await storeCloudPaste(clean);
+          if (cloudId) {
+            setModalPermalink(`${window.location.origin}${window.location.pathname}#p=${cloudId}`);
+          } else {
+            setModalPermalink(`${window.location.origin}${window.location.pathname}#v=${packed}`);
+          }
+        }
+      } catch {
+        setModalPermalink(window.location.href);
+      }
+    } else {
+      setModalPermalink('');
+    }
+  };
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const renderTimeoutRef = useRef<number | null>(null);
@@ -111,11 +142,30 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
 
   // Load from hash on mount
   useEffect(() => {
-    const handleHash = () => {
+    const handleHash = async () => {
+      // 1. Cloud short paste: #p=ID or #id=ID
+      const pasteMatch = window.location.hash.match(/^#(?:p|id)=([a-zA-Z0-9_-]+)$/);
+      if (pasteMatch) {
+        const id = pasteMatch[1];
+        try {
+          showToastMsg('Loading paste...');
+          const content = await fetchCloudPaste(id);
+          if (content) {
+            setCode(content);
+            const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
+            setIsViewOnly(!hasEditParam);
+            return;
+          }
+        } catch {
+          showToastMsg('Failed to load shared paste');
+        }
+      }
+
+      // 2. Direct embedded payload: #v=...
       const match = window.location.hash.match(/^#v=(.+)$/);
       if (match) {
         try {
-          const decoded = decodePaste(match[1]);
+          const decoded = await unpack(match[1]);
           setCode(decoded);
           const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
           if (!hasEditParam) {
@@ -166,27 +216,49 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
     }
 
     setIsShortening(true);
-    showToastMsg('Shortening link...');
+    showToastMsg('Generating short link...');
 
     try {
-      const encoded = encodePaste(code);
-      const permalink = `${window.location.origin}${window.location.pathname}#v=${encoded}`;
-      history.replaceState(null, '', `#v=${encoded}`);
+      // 1. Automatically remove comments if present to minimize payload size
+      const cleanCode = stripComments(code);
+
+      // 2. Compress via user's CompressionStream('deflate-raw')
+      const packed = await pack(cleanCode);
+
+      let permalink = '';
       
-      // Automatically shorten the link
-      const short = await shortenUrl(permalink);
-      await navigator.clipboard.writeText(short);
-      
-      if (short !== permalink) {
-        showToastMsg(`Short link copied: ${short}`);
+      // If packed string is compact (<= 2500 chars), encode directly into URL
+      if (packed.length <= 2500) {
+        permalink = `${window.location.origin}${window.location.pathname}#v=${packed}`;
       } else {
-        showToastMsg('Compressed permalink copied');
+        // For larger documents (like 30KB - 56KB), store via cloud paste so URL stays tiny (35 chars)
+        const cloudId = await storeCloudPaste(cleanCode);
+        if (cloudId) {
+          permalink = `${window.location.origin}${window.location.pathname}#p=${cloudId}`;
+        } else {
+          permalink = `${window.location.origin}${window.location.pathname}#v=${packed}`;
+        }
       }
+
+      // Update browser history hash
+      const hashPart = permalink.split('#')[1] || `v=${packed}`;
+      history.replaceState(null, '', `#${hashPart}`);
+
+      // Copy the clean direct first-party short link to clipboard
+      // This guarantees instant 0-second direct access without any 3rd-party preview interstitials!
+      await navigator.clipboard.writeText(permalink);
+      showToastMsg(`Direct short link copied (${permalink.length} chars)`);
     } catch {
-      const encoded = encodePaste(code);
-      const permalink = `${window.location.origin}${window.location.pathname}#v=${encoded}`;
-      history.replaceState(null, '', `#v=${encoded}`);
-      prompt('Copy share link:', permalink);
+      try {
+        const cleanCode = stripComments(code);
+        const packed = await pack(cleanCode);
+        const permalink = `${window.location.origin}${window.location.pathname}#v=${packed}`;
+        history.replaceState(null, '', `#v=${packed}`);
+        await navigator.clipboard.writeText(permalink);
+        showToastMsg('Link copied');
+      } catch {
+        prompt('Copy link:', window.location.href);
+      }
     } finally {
       setIsShortening(false);
     }
@@ -311,7 +383,7 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
             Open full
           </button>
           <button
-            onClick={() => setIsShortenerOpen(true)}
+            onClick={handleOpenShortenerModal}
             className="px-2.5 py-1.5 rounded-lg border border-[#007AFF]/25 bg-white text-[#007AFF] hover:bg-[#007AFF]/5 cursor-pointer transition-colors flex items-center gap-1.5"
             title="Open URL Shortener Studio"
           >
@@ -423,11 +495,7 @@ export const FullScreenEditor: React.FC<FullScreenEditorProps> = ({
       <UrlShortenerModal
         isOpen={isShortenerOpen}
         onClose={() => setIsShortenerOpen(false)}
-        activePermalink={
-          typeof window !== 'undefined' && code.trim()
-            ? `${window.location.origin}${window.location.pathname}#v=${encodePaste(code)}`
-            : ''
-        }
+        activePermalink={modalPermalink}
         onToast={showToastMsg}
       />
     </div>

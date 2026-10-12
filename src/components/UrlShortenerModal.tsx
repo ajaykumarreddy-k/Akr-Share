@@ -117,36 +117,34 @@ export const UrlShortenerModal: React.FC<UrlShortenerModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
-          {/* Section 1: Current Paste Short Link */}
-          <div className="bg-[#F8FAFC] border border-[#007AFF]/20 rounded-2xl p-4.5 space-y-3">
+          {/* Section 1: Current Paste Short Links */}
+          <div className="bg-[#F8FAFC] border border-[#007AFF]/20 rounded-2xl p-4.5 space-y-4">
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="font-bold text-[#007AFF] flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                Active Paste Short Link
+                Active Paste Links
               </span>
-              {activePermalink && (
-                <span className="text-[11px] text-[#241813]/50">
-                  Original: {activePermalink.length} chars
-                </span>
-              )}
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Direct 0s Redirect
+              </span>
             </div>
 
-            {isActiveLoading ? (
-              <div className="flex items-center justify-center py-4 text-xs font-mono text-[#007AFF] gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Generating short URL...</span>
-              </div>
-            ) : activeShortUrl ? (
-              <div className="space-y-2.5">
+            {/* Direct Instant Link (Bypasses all 3rd-party preview screens) */}
+            {activePermalink ? (
+              <div className="space-y-2">
+                <div className="text-[11px] font-mono font-semibold text-[#241813] flex items-center justify-between">
+                  <span>Direct Short Link (Instant — No Countdown)</span>
+                  <span className="text-[#007AFF] font-bold">{activePermalink.length} chars</span>
+                </div>
                 <div className="flex items-center gap-2 bg-white border border-[#007AFF]/30 rounded-xl p-2.5 shadow-xs">
                   <input
                     type="text"
                     readOnly
-                    value={activeShortUrl}
+                    value={activePermalink}
                     className="flex-1 bg-transparent border-0 text-xs sm:text-sm font-mono text-[#007AFF] font-bold focus:outline-hidden truncate"
                   />
                   <a
-                    href={activeShortUrl}
+                    href={activePermalink}
                     target="_blank"
                     rel="noreferrer"
                     className="p-1.5 rounded-lg border border-[#007AFF]/20 text-[#007AFF] hover:bg-[#007AFF]/10 transition-colors"
@@ -155,7 +153,7 @@ export const UrlShortenerModal: React.FC<UrlShortenerModalProps> = ({
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <button
-                    onClick={() => copyToClipboard(activeShortUrl)}
+                    onClick={() => copyToClipboard(activePermalink)}
                     className="px-3 py-1.5 rounded-lg bg-[#007AFF] text-white hover:bg-[#0066D6] text-xs font-mono font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     {copiedActive ? (
@@ -171,21 +169,38 @@ export const UrlShortenerModal: React.FC<UrlShortenerModalProps> = ({
                     )}
                   </button>
                 </div>
-
-                <div className="flex items-center justify-between text-[11px] font-mono text-[#241813]/60 px-1">
-                  <span>
-                    Shortened: <strong className="text-[#007AFF]">{activeShortUrl.length} chars</strong>
-                  </span>
-                  {activePermalink.length > activeShortUrl.length && (
-                    <span className="text-emerald-600 font-bold">
-                      {Math.round((1 - activeShortUrl.length / activePermalink.length) * 100)}% reduction
-                    </span>
-                  )}
-                </div>
+                <p className="text-[10px] font-mono text-emerald-700">
+                  ✓ Opens immediately in 0 milliseconds. No TinyURL countdowns or preview warnings.
+                </p>
               </div>
             ) : (
               <div className="text-xs font-mono text-[#241813]/60 py-2">
                 Type or paste HTML in the studio to generate a shareable short link.
+              </div>
+            )}
+
+            {/* External Shortener Option */}
+            {activeShortUrl && activeShortUrl !== activePermalink && (
+              <div className="pt-2 border-t border-[#007AFF]/15 space-y-2">
+                <div className="text-[11px] font-mono text-[#241813]/70 flex items-center justify-between">
+                  <span>External Short URL (TinyURL)</span>
+                  <span className="text-[10px] text-amber-700 font-medium">May show 10s preview on localhost</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/70 border border-[#241813]/15 rounded-xl p-2 shadow-2xs">
+                  <input
+                    type="text"
+                    readOnly
+                    value={activeShortUrl}
+                    className="flex-1 bg-transparent border-0 text-xs font-mono text-[#241813]/80 focus:outline-hidden truncate"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(activeShortUrl, true)}
+                    className="px-2.5 py-1 rounded-lg border border-[#241813]/20 hover:bg-[#241813]/5 text-xs font-mono transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedCustom ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <span>Copy</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

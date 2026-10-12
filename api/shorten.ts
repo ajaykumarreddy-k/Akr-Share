@@ -44,10 +44,16 @@ export default async function handler(request: Request): Promise<Response> {
 
   targetUrl = targetUrl.trim();
 
+  // If URL points to localhost, rewrite host to production domain so external shorteners do not show localhost preview warnings
+  let publicUrl = targetUrl;
+  if (/^https?:\/\/localhost(:\d+)?/i.test(publicUrl)) {
+    publicUrl = publicUrl.replace(/^https?:\/\/localhost(:\d+)?/i, 'https://akr-share.vercel.app');
+  }
+
   // Tier 1: TinyURL API
   try {
     const res = await fetch(
-      'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(targetUrl),
+      'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(publicUrl),
       { signal: AbortSignal.timeout(4500) }
     );
     if (res.ok) {
@@ -66,32 +72,10 @@ export default async function handler(request: Request): Promise<Response> {
     console.warn('TinyURL failed:', err);
   }
 
-  // Tier 2: is.gd API
+  // Tier 2: clck.ru API
   try {
     const res = await fetch(
-      'https://is.gd/create.php?format=simple&url=' + encodeURIComponent(targetUrl),
-      { signal: AbortSignal.timeout(4500) }
-    );
-    if (res.ok) {
-      const text = (await res.text()).trim();
-      if (text.startsWith('http')) {
-        return new Response(JSON.stringify({ shortUrl: text, service: 'is.gd' }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('is.gd failed:', err);
-  }
-
-  // Tier 3: clck.ru API
-  try {
-    const res = await fetch(
-      'https://clck.ru/--?url=' + encodeURIComponent(targetUrl),
+      'https://clck.ru/--?url=' + encodeURIComponent(publicUrl),
       { signal: AbortSignal.timeout(4500) }
     );
     if (res.ok) {

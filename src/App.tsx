@@ -16,7 +16,11 @@ export default function App() {
   // Check if opening directly from a shared link without ?edit
   useEffect(() => {
     const checkHash = () => {
-      const hasHash = window.location.hash.startsWith('#v=');
+      const hasHash =
+        window.location.hash.startsWith('#v=') ||
+        window.location.hash.startsWith('#p=') ||
+        window.location.hash.startsWith('#id=') ||
+        window.location.pathname.startsWith('/p/');
       const hasEditParam = new URLSearchParams(window.location.search).get('edit') !== null;
       if (hasHash && !hasEditParam) {
         setIsSharedView(true);

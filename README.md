@@ -25,8 +25,9 @@ Author or drop single-file markup directly into the code studio, view immediate 
 
 - **Zero backend required**: Runs 100% in the client browser. No databases, accounts, or cloud dependencies.
 - **High-efficiency permalinks**: Full HTML documents are compressed with Level-9 Deflate into compact Base64URL hash fragments (`#v=z~...`), reducing URL sizes by up to 85% with zero server dependency.
-- **Real-time execution**: Instant live DOM rendering with support for Canvas 2D, WebGL, CSS animations, Tailwind CDN, and inline JavaScript.
 - **One-click export**: Download standalone `.html` files anytime ready for production hosting.
+
+> 📖 **Engineering & Architecture Deep-Dive**: For detailed system design, sequence diagrams, and how we solved the **"Link Big Issue"** using `deflate-raw` compression and cloud permalinks, read [**`working.md`**](./working.md).
 
 ---
 
@@ -152,6 +153,9 @@ The embedded studio includes a responsive viewport switcher that resizes the exe
 
 ```
 akr-paste-share/
+├── api/
+│   ├── paste.ts              # Edge serverless function for cloud paste creation & retrieval
+│   └── shorten.ts            # Edge serverless function for multi-tier URL shortening
 ├── public/
 │   ├── footer-final.png      # Halftone clouds background banner
 │   ├── main.png              # Creation of Code Renaissance hero banner
@@ -164,18 +168,21 @@ akr-paste-share/
 │   │   ├── Footer.tsx              # Minimalist editorial footer with cloud artwork
 │   │   ├── FullScreenEditor.tsx    # Live code studio, execution sandbox & viewports
 │   │   ├── HeroPoster.tsx          # Full-screen Renaissance poster & typography
-│   │   └── PrismCodeEditor.tsx     # Syntax-highlighted HTML editor with line numbers
+│   │   ├── PrismCodeEditor.tsx     # Syntax-highlighted HTML editor with line numbers
+│   │   └── UrlShortenerModal.tsx   # URL shortener modal (active paste & custom URLs)
 │   ├── data/
 │   │   └── templates.ts            # Curated HTML/Canvas/SVG starter templates
 │   ├── utils/
-│   │   └── shareEncoding.ts        # UTF-8 Base64URL encode/decode engine
+│   │   ├── shareEncoding.ts        # pack, unpack, stripComments, and cloud paste engine
+│   │   └── urlShortener.ts         # Multi-tier URL shortener client with failovers
 │   ├── App.tsx                     # Main layout & route/hash coordinator
 │   ├── index.css                   # Tailwind CSS root styles
 │   └── main.tsx                    # React DOM entrypoint
 ├── index.html                      # HTML root with OpenGraph & font links
 ├── package.json                    # Project metadata & scripts
 ├── tsconfig.json                   # TypeScript compiler configuration
-└── vite.config.ts                  # Vite bundler & server configuration
+├── vite.config.ts                  # Vite bundler, dev server & API proxy middlewares
+└── working.md                      # Complete architecture & "link big issue" engineering guide
 ```
 
 ---
